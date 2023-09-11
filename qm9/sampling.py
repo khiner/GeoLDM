@@ -29,13 +29,11 @@ def rotate_chain(z):
          [-np.sin(theta), 0., np.cos(theta)]]
     ).float()
 
-    Q = torch.mm(torch.mm(Qz, Qx), Qy)
-
-    Q = Q.to(z.device)
+    Q = torch.mm(torch.mm(Qz, Qx), Qy).to(z.device)
 
     results = []
     results.append(z)
-    for i in range(n_steps):
+    for _ in range(n_steps):
         z_x = results[-1][:, :, :3]
         # print(z_x.size(), Q.size())
         new_x = torch.matmul(z_x.view(-1, 3), Q.T).view(1, -1, 3)

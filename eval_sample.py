@@ -8,7 +8,7 @@ import utils
 import argparse
 from configs.datasets_config import qm9_with_h, qm9_without_h
 from qm9 import dataset
-from qm9.models import get_model, get_autoencoder, get_latent_diffusion
+from qm9.models import get_latent_diffusion
 
 from equivariant_diffusion.utils import assert_correctly_masked
 import torch
@@ -19,6 +19,7 @@ from os.path import join
 from qm9.sampling import sample_chain, sample
 from configs.datasets_config import get_dataset_info
 
+import time
 
 def check_mask_correct(variables, node_mask):
     for variable in variables:
@@ -104,6 +105,10 @@ def main():
         help='N tries to find stable molecule for gif animation')
     parser.add_argument('--n_nodes', type=int, default=19,
                         help='number of atoms in molecule for gif animation')
+    parser.add_argument('--n_samples', type=int, default=100,
+                        help='number of samples to visualize')
+    parser.add_argument('--no_mps', type=bool, default=False,
+                        help='Do not use MPS device.')
 
     eval_args, unparsed_args = parser.parse_known_args()
 
@@ -118,10 +123,11 @@ def main():
     if not hasattr(args, 'aggregation_method'):
         args.aggregation_method = 'sum'
 
+    # Check that MPS is available
+    args.mps = not eval_args.no_mps and torch.backends.mps.is_available()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
-    device = torch.device("cuda" if args.cuda else "cpu")
+    device = torch.device("mps" if args.mps else ("cuda" if args.cuda else "cpu"))
     args.device = device
-    dtype = torch.float32
     utils.create_folders(args)
     print(args)
 
@@ -140,18 +146,23 @@ def main():
     flow.load_state_dict(flow_state_dict)
 
     print('Sampling handful of molecules.')
+    start_time = time.time()
     sample_different_sizes_and_save(
         args, eval_args, device, flow, nodes_dist,
-        dataset_info=dataset_info, n_samples=30)
+        dataset_info=dataset_info, n_samples=10)
+    print('Time: ', time.time() - start_time)
 
     print('Sampling stable molecules.')
+    start_time = time.time()
     sample_only_stable_different_sizes_and_save(
         args, eval_args, device, flow, nodes_dist,
         dataset_info=dataset_info, n_samples=10, n_tries=2*10)
+    print('Time: ', time.time() - start_time)
+
     print('Visualizing molecules.')
     vis.visualize(
         join(eval_args.model_path, 'eval/molecules/'), dataset_info,
-        max_num=100, spheres_3d=True)
+        max_num=eval_args.n_samples, spheres_3d=True)
 
     print('Sampling visualization chain.')
     save_and_sample_chain(
